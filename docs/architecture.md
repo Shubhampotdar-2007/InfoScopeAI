@@ -2,9 +2,9 @@
 
 ## 1. Executive Summary
 
-**InfoScope AI** is an AI-assisted information gap detection platform. It is engineered to accept a research topic, ingest both live web intelligence and user-targeted URLs, systematically extract and cross-examine claims, isolate contradictions and unbacked assertions, and synthesize prioritized verification checklists with coverage scores.
+**InfoScope AI** is an AI-assisted information gap detection platform. It accepts a research topic, concurrently collects intelligence from multiple search providers and user-targeted URLs, systematically normalizes claims, isolates contradictions and unbacked assertions, and compiles prioritized verification checklists.
 
-This document outlines the foundation architecture, security perimeter, data flows, and component interactions established in the initial production-minded MVP.
+This document outlines the system design across **Stage 1 (Foundation & Security)** and **Stage 2 (Multi-Provider Concurrent Web Research)**.
 
 ---
 
@@ -22,110 +22,74 @@ This document outlines the foundation architecture, security perimeter, data flo
 │  - GoTrue Auth (Session / JWT)       │  │  - Uvicorn ASGI Server       │
 │  - PostgreSQL with RLS               │  │  - Pydantic Settings & Models│
 │  - research_sessions Table           │  │  - PyJWT Supabase Validator  │
-└──────────────────────────────────────┘  │  - Health & Diagnostic APIs │
+│  - research_sources Table            │  │  - Health & Diagnostic APIs │
+└──────────────────────────────────────┘  │  - Search Orchestrator       │
                    ▲                      └──────────────┬───────────────┘
                    │                                     │
-                   └─────────────────────────────────────┘
-                     Async Pipeline & Server Verification
+                   │                                     ▼
+                   │                           ┌──────────────┐
+                   │                           │ Tavily Search│
+                   │                           │   REST API   │
+                   │                           └──────────────┘
+                   │                                     │
+                   └─────────────────────────────────────┴───────────────┘
 ```
 
 ---
 
-## 3. Technology Stack Breakdown
+## 3. Web Search Architecture (Tavily Sole Provider)
 
-### Frontend Tier
-- **Framework**: React 18 with Vite.
-- **Language**: JavaScript (ES2023+).
-- **Styling**: Tailwind CSS v4 with modern CSS variables, supporting a hybrid dark/light theme (default: Dark Navy `#0b0f19`).
-- **State & Server Cache**: TanStack Query v5 with optimistic caching and health polling.
-- **Routing**: React Router DOM v6 with protected route wrappers (`ProtectedRoute.jsx`).
-- **Icons**: Lucide React.
-- **Visualization**: Recharts for coverage distribution, claim status breakdowns, and metrics.
-- **API Client**: Axios configured with auto-injection of Supabase Bearer tokens.
+### 3.1 Search Provider
+- **`TavilySearchProvider`**: Interacts with `https://api.tavily.com/search` to retrieve search results with content snippets and confidence scores.
+- Reads `TAVILY_API_KEY` securely from the backend environment.
+- Formats results into the normalized source schema (`NormalizedSource`).
 
-### Backend Tier
-- **Runtime**: Python 3.12+ (tested on Python 3.14).
-- **Framework**: FastAPI (high-performance async ASGI).
-- **Server**: Uvicorn with ASGI transport.
-- **Configuration**: Pydantic Settings with strict validation and `.env` loading.
-- **Security & JWT**: PyJWT with cryptography for server-side Supabase token verification.
-- **HTTP Client**: HTTPX for async external requests and testing.
-- **Validation**: Pydantic V2 models for strict request/response contracts.
-- **Documentation**: Automatic OpenAPI 3.1 Swagger UI (`/docs`) and ReDoc (`/redoc`).
+### 3.2 Search Orchestration (`SearchOrchestrator`)
+- Executes grounded search queries via `TavilySearchProvider`.
+- Applies request timeouts capped via `TAVILY_TIMEOUT_SECONDS` (15s) and `SEARCH_TIMEOUT_SECONDS` (30s).
+- Execution latency and status are recorded in `provider_statuses` for frontend diagnostics.
 
-### Database & Auth Tier
-- **Authentication**: Supabase Auth (GoTrue) handling email/password signup, session storage, and JWT token issuance.
-- **Persistence**: Supabase PostgreSQL.
-- **Access Control**: Row Level Security (RLS) guaranteeing that queries and mutations are isolated to `auth.uid() = user_id`.
+### 3.3 Normalization & Deduplication
+- **`canonicalize_url`**: Normalizes schemes and hosts, removes default ports, collapses slashes, strips fragments (`#...`), and filters out tracking parameters (`utm_*`, `ref`, `fbclid`, etc.).
+- **`merge_and_deduplicate_sources`**:
+  - Groups items by canonical URL against any user-supplied target URLs.
+  - Enforces `SEARCH_MAX_TOTAL_RESULTS` (default: 15).
+
+### 3.4 Error Handling & Diagnostics
+- Sanitizes error messages to protect credentials and internal endpoints.
+- Classifies errors cleanly into timeouts, authentication issues, rate limits, and API errors.
 
 ---
 
 ## 4. Security Architecture
 
 ### Zero-Trust Authentication
-1. **No Client-Supplied User IDs in Request Bodies**: The backend does NOT accept or trust a `user_id` supplied in request payloads to identify who is making a request.
-2. **Cryptographic JWT Verification**: In incoming requests, the Bearer token in the `Authorization` header is verified against `SUPABASE_JWT_SECRET`. The authenticated user ID is extracted strictly from the token's `sub` claim.
-3. **Fail-Closed Strategy**: If credentials are missing, expired, or malformed, a standardized `401 Unauthorized` response is returned.
+1. **No Client-Supplied User IDs in Request Bodies**: The backend derives user identity strictly from the verified JWT `sub` claim.
+2. **Cryptographic JWT Verification**: PyJWT verifies access tokens against `SUPABASE_JWT_SECRET` (HS256) and audience `authenticated`.
+3. **Secret Isolation**: `TAVILY_API_KEY` resides exclusively in `backend/.env` and is never exposed to browser bundles.
 
-### Row Level Security (RLS)
-The database enforces tenant isolation at the PostgreSQL engine level:
-```sql
-ALTER TABLE public.research_sessions ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own research sessions"
-    ON public.research_sessions FOR SELECT
-    USING (auth.uid() = user_id);
-```
-Even if a developer makes an error in backend filtering, PostgreSQL will never return records belonging to another `user_id`.
-
-### Secret Segregation
-- **Browser-Safe Variables**: Only public configuration is exposed to Vite via `VITE_` prefixes (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_BASE_URL`).
-- **Backend Secrets**: Supabase service role keys, JWT secrets, and future LLM API keys reside strictly on the server in `backend/.env`.
+### Database Row Level Security (RLS)
+PostgreSQL enforces user isolation across all tables:
+- `research_sessions`: `USING (auth.uid() = user_id)`
+- `research_sources`: `USING (auth.uid() = user_id)`
 
 ---
 
-## 5. Standardized API Protocol
+## 5. API Endpoints
 
-All backend endpoints adhere to a unified JSON envelope:
-
-```json
-{
-  "success": true,
-  "status_code": 200,
-  "message": "InfoScope AI backend is operational.",
-  "data": { ... },
-  "timestamp": "2026-10-31T06:50:00.000000Z"
-}
-```
-
-### Initial Core Endpoints
 | Method | Endpoint | Access | Purpose |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/` | Public | Service metadata, version, and documentation links |
-| `GET` | `/api/v1/health` | Public | System uptime, environment status, and health metrics |
-| `GET` | `/api/v1/research/sessions` | Protected (JWT) | Lists research sessions owned by authenticated user |
-| `POST` | `/api/v1/research/sessions` | Protected (JWT) | Validates research query and initiates gap analysis pipeline |
-
-*Note: As per requirements, the `/api/v1/health` endpoint serves strictly as a liveness probe and does not perform user authentication.*
+| `GET` | `/` | Public | Service metadata & documentation links |
+| `GET` | `/api/v1/health` | Public | System uptime & health status |
+| `GET` | `/api/v1/research/sessions` | Protected (JWT) | Lists user's research sessions |
+| `POST` | `/api/v1/research/sessions` | Protected (JWT) | Ingests research query, executes Tavily search, and returns normalized sources |
 
 ---
 
-## 6. Frontend Navigation & Module Blueprint
+## 6. Roadmap & Next Phases
 
-| Navigation Item | Route | Status | Description |
-| :--- | :--- | :--- | :--- |
-| **Dashboard** | `/` | Active (MVP) | Research query input, source strategy toggle (Web, My URLs, Both), feature pillars, coverage charts, sample preview mode |
-| **New Research** | `/research/new` | Coming Soon | Dedicated deep-crawling configuration workspace |
-| **Sources** | `/sources` | Coming Soon | URL collection, RSS/API connectors, authority scoring |
-| **Detected Issues** | `/issues` | Coming Soon | Side-by-side claim conflict analyzer & timeline diff |
-| **Verification Checklist** | `/checklist` | Coming Soon | Prioritized action items for researcher verification |
-| **Research History** | `/history` | Coming Soon | Searchable archive of completed gap investigations |
-
----
-
-## 7. Roadmap & Next Phases
-
-1. **Phase 2 — Ingestion & Search Engine**: Integrate web search APIs (e.g. Brave / Tavily / Serper) and secure asynchronous URL crawling with strict SSRF protection.
-2. **Phase 3 — Claim Extraction Pipeline**: Parse ingested HTML/text, extract factual claims with sentence-level citations.
-3. **Phase 4 — Gap & Discrepancy Classifier**: LLM-driven cross-comparison to detect contradictory claims and uncorroborated gaps.
-4. **Phase 5 — Report Synthesis**: Automatic generation of verification checklists and PDF/Markdown audit exports.
+1. **Stage 1 (Done)**: Production foundation, Supabase Auth, RLS, Tailwind v4 Dashboard.
+2. **Stage 2 (Done)**: Tavily web search, normalization, deduplication, and attribution.
+3. **Stage 3 (Next)**: Sentence-level claim extraction pipeline.
+4. **Stage 4 (Next)**: Contradiction detection & information gap classifier.
+5. **Stage 5 (Next)**: Evidence-backed report synthesis and verification checklist generation.

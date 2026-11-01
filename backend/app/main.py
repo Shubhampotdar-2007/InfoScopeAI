@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.api.routes import api_router
 from app.schemas.response import APIResponse
+from app.database import close_db_http_client, DatabaseError
 
 
 @asynccontextmanager
@@ -24,6 +25,7 @@ async def lifespan(app: FastAPI):
     print(f"CORS Allowed Origins: {settings.CORS_ORIGINS}")
     yield
     # Shutdown actions
+    await close_db_http_client()
     print(f"[{datetime.now(timezone.utc).isoformat()}] {settings.PROJECT_NAME} shutting down...")
 
 
@@ -70,12 +72,26 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         for err in errors
     ]
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=APIResponse(
             success=False,
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             message="Request validation failed.",
             data={"errors": formatted_errors}
+        ).model_dump(mode="json")
+    )
+
+
+# Exception Handler: Database Exceptions
+@app.exception_handler(DatabaseError)
+async def database_exception_handler(request: Request, exc: DatabaseError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=APIResponse(
+            success=False,
+            status_code=exc.status_code,
+            message=exc.message,
+            data=None
         ).model_dump(mode="json")
     )
 

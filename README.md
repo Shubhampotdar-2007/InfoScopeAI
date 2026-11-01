@@ -1,8 +1,34 @@
-# InfoScope AI — Information Gap Detection Platform
+# InfoScope AI — AI Information Gap Detection Platform
 
-**InfoScope AI** is an AI-assisted information gap detection platform designed to accept a research topic or question, systematically collect intelligence from web search and targeted URLs, extract and cross-examine claims, isolate contradictions and information gaps, and compile prioritized verification checklists.
+**InfoScope AI** is a multi-source research and information analysis platform designed to accept complex investigation topics, systematically collect intelligence from web search (powered solely by Tavily) and user-supplied URLs, track critical expected research dimensions, and calculate real-time coverage completeness scores.
 
-This repository contains the **initial production-minded MVP foundation**, including a React/Vite/Tailwind CSS v4 frontend, a FastAPI Python 3.12+ backend, and a Supabase PostgreSQL schema with Row Level Security (RLS).
+The platform is designed with a zero-trust multi-tenant security architecture: all user database operations are authenticated using cryptographic ES256 Supabase JWT verification against project JWKS, forwarding user tokens to Supabase PostgREST with strict Row Level Security (RLS).
+
+---
+
+## 🚀 Key Features
+
+- **Grounded Web Intelligence Retrieval**: Leverages the Tavily Search API as the sole web retrieval engine for real-time, high-signal research sources.
+- **URL Canonicalization & Deduplication**: Normalizes URLs (stripping tracking parameters, default ports, anchors) to deduplicate sources across search queries and custom target URLs.
+- **Provider Attribution Diagnostics**: Measures retrieval latency and source counts with clear non-sensitive diagnostics for timeouts or network issues.
+- **Expected Research Dimensions**: Define and customize weighted evaluation criteria (e.g., Architecture, Pricing, Security, Performance) with relative importance weights (0.10x to 5.00x).
+- **Mathematical Coverage Scoring**: Real-time completeness calculation:
+  $$\text{Coverage Score} = \text{round}\left(\frac{\sum (\text{weight} \times \text{status\_factor})}{\sum \text{weight}} \times 100\right)$$
+  *(Covered = 1.0 factor, Partially Covered = 0.5 factor, Missing = 0.0 factor)*.
+- **Full Historical Archive**: Browse, reopen, inspect, and update previous research sessions persisted with PostgreSQL RLS isolation.
+- **Zero-Trust Security**: Authenticated requests derive user identity strictly from verified Supabase ES256 JWT tokens. Never accepts unverified frontend user IDs.
+- **Autonomous Claims & Conflict Hub**: Clearly designated as in active development, maintaining absolute data integrity without fabricating synthetic claims.
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React 18, Vite 6, Tailwind CSS v4, React Router DOM v6, TanStack React Query v5, Axios, Lucide React, Recharts |
+| **Backend** | Python 3.12+ (tested on Python 3.14.7), FastAPI, Uvicorn, Pydantic V2, Pydantic Settings, HTTPX, PyJWT, Cryptography |
+| **Database & Auth** | Supabase Auth (GoTrue), Supabase PostgreSQL 15, PostgREST v1, Row Level Security (RLS) |
+| **Search Engine** | **Tavily Search API** (grounded real-time web retrieval) |
 
 ---
 
@@ -39,6 +65,9 @@ InfoScope-AI/
 │   │   │   └── PlaceholderPage.jsx
 │   │   ├── services/
 │   │   │   └── api.js
+│   │   ├── utils/
+│   │   │   ├── searchErrors.js
+│   │   │   └── searchErrors.test.js
 │   │   ├── App.jsx
 │   │   ├── main.jsx
 │   │   └── index.css
@@ -58,6 +87,19 @@ InfoScope-AI/
 │   │   │   ├── config.py
 │   │   │   └── security.py
 │   │   ├── database/
+│   │   │   ├── repositories/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── base.py
+│   │   │   │   ├── checklist.py
+│   │   │   │   ├── claims.py
+│   │   │   │   ├── expected_fields.py
+│   │   │   │   ├── issue_evidence.py
+│   │   │   │   ├── issues.py
+│   │   │   │   ├── reports.py
+│   │   │   │   ├── sessions.py
+│   │   │   │   └── sources.py
+│   │   │   ├── client.py
+│   │   │   ├── exceptions.py
 │   │   │   └── __init__.py
 │   │   ├── schemas/
 │   │   │   ├── __init__.py
@@ -65,15 +107,36 @@ InfoScope-AI/
 │   │   │   ├── research.py
 │   │   │   └── response.py
 │   │   ├── services/
+│   │   │   ├── search/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── base.py            # NormalizedSource & BaseSearchProvider ABC
+│   │   │   │   ├── normalizer.py      # Canonicalization & deduplication
+│   │   │   │   ├── orchestrator.py    # Search runner
+│   │   │   │   └── tavily.py          # Tavily search API provider
 │   │   │   └── __init__.py
 │   │   ├── main.py
 │   │   └── __init__.py
+│   ├── scripts/
+│   │   └── verify_tavily_live.py
 │   ├── tests/
-│   │   ├── __init__.py
-│   │   └── test_health.py
+│   │   ├── conftest.py
+│   │   ├── test_analysis_repositories.py
+│   │   ├── test_auth_audit.py
+│   │   ├── test_core_repositories.py
+│   │   ├── test_database_foundation.py
+│   │   ├── test_expected_fields_api.py
+│   │   ├── test_health.py
+│   │   ├── test_jwt_alg_regression.py
+│   │   ├── test_research_sessions_api.py
+│   │   └── test_search_providers.py
 │   ├── .env.example
 │   └── requirements.txt
 ├── database/
+│   ├── migrations/
+│   │   ├── 001_initial_schema.sql
+│   │   └── 002_stage3_schema_expansion.sql
+│   ├── tests/
+│   │   └── test_stage3_migration.sql
 │   └── schema.sql
 ├── docs/
 │   └── architecture.md
@@ -83,159 +146,139 @@ InfoScope-AI/
 
 ---
 
-## 🛠️ Technology Stack
+## ⚡ Prerequisites
 
-| Layer | Technologies |
-| :--- | :--- |
-| **Frontend** | React 18, Vite, Tailwind CSS v4, React Router DOM, Supabase JS SDK, TanStack Query, Axios, Lucide React, Recharts |
-| **Backend** | Python 3.12+ (tested on Python 3.14), FastAPI, Uvicorn, Pydantic V2, Pydantic Settings, HTTPX, PyJWT |
-| **Database & Auth** | Supabase Authentication (GoTrue), Supabase PostgreSQL, Row Level Security (RLS) |
-
----
-
-## ⚡ Quick Start Guide (Windows PowerShell)
-
-### 1. Prerequisites
-- **Node.js**: v18.0.0+ (Tested with Node v24.21.0 & npm 11.19.0)
+- **Node.js**: v18.0.0+ (Tested with Node v24+)
 - **Python**: 3.12+ (Tested with Python 3.14.7)
 - **Supabase Account**: A free Supabase project from [supabase.com](https://supabase.com)
+- **Tavily Search API Key**: Available at [tavily.com](https://tavily.com)
 
 ---
 
-### 2. Backend Setup & Run
+## 🔑 Environment Configuration
 
-Open a Windows PowerShell terminal in the repository root:
+Create local environment files from the provided templates:
 
-```powershell
-# 1. Create Python virtual environment (if not already created)
-python -m venv backend\.venv
+### 1. Backend (`backend/.env`)
+```bash
+PROJECT_NAME="InfoScope AI"
+API_V1_STR="/api/v1"
+ENVIRONMENT="development"
+DEBUG=True
+HOST="0.0.0.0"
+PORT=8000
+CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","http://localhost:3000"]
 
-# 2. Activate virtual environment
-.\backend\.venv\Scripts\Activate.ps1
+# Supabase Configuration (Settings -> API)
+SUPABASE_URL="https://your-project-ref.supabase.co"
+SUPABASE_ANON_KEY="your-supabase-anon-key"
+SUPABASE_KEY=""
+SUPABASE_SERVICE_ROLE_KEY=""
+SUPABASE_JWT_AUDIENCE="authenticated"
+SUPABASE_JWT_ALGORITHM="ES256"
 
-# 3. Upgrade pip and install dependencies
-pip install -r backend\requirements.txt
-
-# 4. Create your backend environment configuration
-Copy-Item backend\.env.example backend\.env
-
-# 5. Run the FastAPI backend development server
-uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000
+# Tavily Search Provider
+TAVILY_API_KEY="tvly-your-api-key"
+SEARCH_TIMEOUT_SECONDS=30.0
+TAVILY_TIMEOUT_SECONDS=15.0
+SEARCH_MAX_RESULTS_PER_PROVIDER=5
+SEARCH_MAX_TOTAL_RESULTS=15
 ```
 
-> **Tip:** If PowerShell displays an execution policy restriction when activating the venv, you can run directly via the venv python executable:
-> ```powershell
-> .\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --port 8000
-> ```
+### 2. Frontend (`frontend/.env`)
+```bash
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+> **Security Note:** Never commit `.env` files or share API keys, JWT secrets, or Supabase service-role credentials. `.env` is excluded in `.gitignore`.
 
 ---
 
-### 3. Frontend Setup & Run
+## 🗄️ Database Setup & Migrations
 
-Open a second Windows PowerShell terminal in the repository root:
+To apply or verify the Supabase PostgreSQL database schema:
 
+1. Open your project at [Supabase Dashboard](https://supabase.com/dashboard).
+2. Go to **SQL Editor** in the left sidebar.
+3. Run the schema migrations in order:
+   - **Migration 001**: [`database/migrations/001_initial_schema.sql`](database/migrations/001_initial_schema.sql) — Sets up `research_sessions` and `research_sources` with user isolation and RLS policies.
+   - **Migration 002**: [`database/migrations/002_stage3_schema_expansion.sql`](database/migrations/002_stage3_schema_expansion.sql) — Atomically creates `expected_fields`, `claims`, `issues`, `issue_evidence`, `checklist_items`, and `reports` with composite FKs and strict RLS policies.
+
+To verify schema integrity:
+- Run [`database/tests/test_stage3_migration.sql`](database/tests/test_stage3_migration.sql) inside Supabase SQL Editor. The test runs in a transaction and rolls back automatically.
+
+---
+
+## 🚀 Running the Application Locally
+
+### 1. Start the Backend API Server
 ```powershell
-# 1. Navigate to the frontend directory
+# Navigate to project root
+$env:PYTHONPATH="backend"
+.\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --port 8000
+```
+- API Base: `http://localhost:8000`
+- Interactive Swagger UI: `http://localhost:8000/docs`
+- Health Check: `http://localhost:8000/api/v1/health`
+
+### 2. Start the Frontend Application
+```powershell
+# In a separate terminal
 cd frontend
-
-# 2. Install npm dependencies
-npm.cmd install
-
-# 3. Create your frontend environment configuration
-Copy-Item .env.example .env
-
-# 4. Start the Vite development server
 npm.cmd run dev
 ```
-
-The frontend will be available at: **`http://localhost:5173`**
-
----
-
-### 4. Database Setup (Supabase SQL)
-
-1. Open your project on the [Supabase Dashboard](https://supabase.com/dashboard).
-2. Click on **SQL Editor** in the left sidebar.
-3. Open [`database/schema.sql`](database/schema.sql), copy its contents, paste them into the SQL Editor, and click **Run**.
-
-This script sets up:
-- The `public.research_sessions` table with foreign key to `auth.users(id)`.
-- Row Level Security (RLS) enabled on `research_sessions`.
-- 4 granular RLS policies ensuring users can only read, insert, update, and delete their own sessions.
-- An automatic trigger updating the `updated_at` column.
-- Optimized performance indexes.
-
----
-
-## 🔑 Environment Variables Reference
-
-### Frontend Configuration (`frontend/.env`)
-
-| Variable | Description | Example Value |
-| :--- | :--- | :--- |
-| `VITE_SUPABASE_URL` | Your Supabase project URL | `https://xyzproject.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | Supabase publishable anonymous key | `eyJhbGciOiJIUzI1Ni...` |
-| `VITE_API_BASE_URL` | Backend FastAPI service base URL | `http://localhost:8000` |
-
-> **Note on Demo Mode:** If Supabase keys are not configured yet, the frontend will display a notice and provide an **"Instant Demo Preview"** button on the login screen so you can immediately explore and test the dashboard.
-
-### Backend Configuration (`backend/.env`)
-
-| Variable | Description | Default / Example |
-| :--- | :--- | :--- |
-| `PROJECT_NAME` | Service name | `InfoScope AI` |
-| `API_V1_STR` | API route prefix | `/api/v1` |
-| `ENVIRONMENT` | Environment name | `development` |
-| `DEBUG` | Verbose debug mode | `True` |
-| `HOST` | Bind address | `0.0.0.0` |
-| `PORT` | Server port | `8000` |
-| `CORS_ORIGINS` | Allowed client origins | `["http://localhost:5173","http://127.0.0.1:5173"]` |
-| `SUPABASE_URL` | Supabase project URL | `https://xyzproject.supabase.co` |
-| `SUPABASE_JWT_SECRET` | Supabase JWT Secret for token verification | *(From Supabase Project Settings -> API)* |
-| `SUPABASE_JWT_AUDIENCE` | Token audience | `authenticated` |
-| `SUPABASE_JWT_ALGORITHM`| Token signature algorithm | `HS256` |
+- Web Application: `http://localhost:5173`
 
 ---
 
 ## 🧪 Testing and Verification
 
-### Backend Verification (Pytest)
-Run all backend integration tests:
-
+### Backend Regression Tests
+Run the complete Pytest suite (115 passed):
 ```powershell
-.\backend\.venv\Scripts\pytest.exe backend\tests -v
+$env:PYTHONPATH="backend"
+.\backend\.venv\Scripts\pytest backend\tests -v
 ```
 
-All 3 tests verify:
-- `GET /`: API welcome and documentation link envelope.
-- `GET /api/v1/health`: Uptime, service version, environment metadata, and proper health response.
-- Protected route security: Ensuring unauthorized requests without a valid Supabase JWT Bearer token return `401 Unauthorized`.
+**Test Suites**:
+- `test_analysis_repositories.py`: Repositories for claims, issues, checklist, reports (10 passed)
+- `test_auth_audit.py`: User isolation, token rejection, RLS verification (5 passed)
+- `test_core_repositories.py`: Sessions and sources repositories (13 passed)
+- `test_database_foundation.py`: PostgREST client, error mapping, connection pooling (24 passed)
+- `test_expected_fields_api.py`: Expected fields CRUD, weight constraints, coverage calculation (14 passed)
+- `test_health.py`: Health endpoint and root info (3 passed)
+- `test_jwt_alg_regression.py`: ES256 JWKS cryptographic validation (10 passed)
+- `test_research_sessions_api.py`: Research API routes, session lifecycle, source persistence (23 passed)
+- `test_search_providers.py`: Tavily provider, URL canonicalization, deduplication (13 passed)
 
-### Frontend Build Verification
-Verify production bundling:
-
+### Frontend Verification
 ```powershell
+# 1. Run Search Error Unit Tests
+node --test frontend/src/utils/searchErrors.test.js
+
+# 2. Run Production Build
 cd frontend
 npm.cmd run build
 ```
 
 ---
 
-## 🌐 Localhost URLs & Endpoints
+## 🎬 Demonstration Flow
 
-| Service | URL | Notes |
-| :--- | :--- | :--- |
-| **Frontend Application** | `http://localhost:5173` | React Dashboard & Auth UI |
-| **Backend API Root** | `http://localhost:8000/` | Service metadata & links |
-| **Backend Health Check** | `http://localhost:8000/api/v1/health` | Public service liveness & uptime |
-| **Swagger Interactive Docs** | `http://localhost:8000/docs` | Interactive OpenAPI documentation |
-| **ReDoc Documentation** | `http://localhost:8000/redoc` | Formatted API documentation |
+1. **Sign Up / Sign In**: Access `http://localhost:5173` and authenticate with email/password via Supabase Auth.
+2. **Formulate Investigation**: Enter a research query (e.g., *"Compare Supabase Auth vs AWS Cognito architecture in 2026"*). Select search strategy (Web Search / Both).
+3. **Trigger Analysis**: Click **Analyze Information Gaps**. Tavily executes web retrieval and normalizes sources.
+4. **Inspect Sources**: Review retrieved sources with canonical URLs, relevance scores, and direct external links.
+5. **Add Expected Dimensions**: Add custom dimensions or click **Load Starter Criteria** to add evaluation criteria with assigned weights.
+6. **Coverage Analytics**: Review the Coverage Dashboard displaying the mathematical completeness percentage, criteria breakdown, and category depth chart.
+7. **Research History**: Return to the dashboard and review previous sessions. Click any historical session to reopen it.
 
 ---
 
-## 🔒 Security Summary
+## ⚠️ Known Limitations
 
-1. **Zero Trust for Request Body User IDs**: User identities are resolved strictly by verifying the Supabase JWT Bearer token on the backend.
-2. **Database RLS Enforced**: Access policies are enforced by PostgreSQL at the database level.
-3. **Environment Segregation**: Sensitive credentials (e.g. JWT secret, future LLM keys) are never exposed to the client bundle.
-4. **Health Endpoint Liveness**: The `/api/v1/health` endpoint serves strictly as an operational probe and does not claim to authenticate users.
+1. **Autonomous Claim Extraction**: LLM-based claim extraction and claim conflict cross-referencing are in active development. This MVP strictly relies on verified web sources and criteria evaluation without fabricating synthetic claims.
+2. **PostgREST User Scope**: Normal user database queries strictly use the verified user's JWT with Supabase anon key headers. The service-role key is never used for ordinary database operations.
+3. **Web Search**: Tavily Search is the sole web provider. If Tavily rate limits or credentials are not configured, clear non-sensitive diagnostics are surfaced.

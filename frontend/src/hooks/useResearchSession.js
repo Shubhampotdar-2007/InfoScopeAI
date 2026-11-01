@@ -10,12 +10,20 @@ export const useResearchSession = () => {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async ({ query, sourceSelection, customUrls }) => {
-      const response = await apiClient.post('/api/v1/research/sessions', {
-        research_query: query,
-        source_selection: sourceSelection,
-        custom_urls: customUrls,
-      });
+    mutationFn: async ({ query, sourceSelection, searchProvider = 'tavily', customUrls = [] }) => {
+      const response = await apiClient.post(
+        '/api/v1/research/sessions',
+        {
+          research_query: query,
+          source_selection: sourceSelection,
+          search_provider: searchProvider,
+          custom_urls: customUrls,
+        },
+        {
+          // Dedicated 45s timeout for Tavily web search execution
+          timeout: 45000,
+        }
+      );
       return response.data;
     },
     onSuccess: (data) => {
@@ -25,8 +33,8 @@ export const useResearchSession = () => {
   });
 
   const triggerAnalysis = useCallback(
-    (query, sourceSelection = 'both', customUrls = []) => {
-      return mutation.mutateAsync({ query, sourceSelection, customUrls });
+    (query, sourceSelection = 'both', searchProvider = 'tavily', customUrls = []) => {
+      return mutation.mutateAsync({ query, sourceSelection, searchProvider, customUrls });
     },
     [mutation]
   );

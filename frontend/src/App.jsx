@@ -47,19 +47,19 @@ export const App = () => {
                 {/* 1. Dashboard (Active MVP) */}
                 <Route index element={<DashboardPage />} />
 
-                {/* 2. New Research (Coming Soon) */}
+                {/* 2. New Research */}
                 <Route
                   path="research/new"
-                  element={
-                    <PlaceholderPage
-                      title="Autonomous Research Engine"
-                      description="Deep crawling, web search orchestration, and automated evidence aggregation pipelines will be unlocked here."
-                      icon={Sparkles}
-                    />
-                  }
+                  element={<DashboardPage defaultView="new" />}
                 />
 
-                {/* 3. Sources (Coming Soon) */}
+                {/* 3. Research History */}
+                <Route
+                  path="history"
+                  element={<DashboardPage defaultView="history" />}
+                />
+
+                {/* 4. Sources (Coming Soon) */}
                 <Route
                   path="sources"
                   element={
@@ -71,7 +71,7 @@ export const App = () => {
                   }
                 />
 
-                {/* 4. Detected Issues (Coming Soon) */}
+                {/* 5. Detected Issues (Coming Soon) */}
                 <Route
                   path="issues"
                   element={
@@ -83,7 +83,7 @@ export const App = () => {
                   }
                 />
 
-                {/* 5. Verification Checklist (Coming Soon) */}
+                {/* 6. Verification Checklist (Coming Soon) */}
                 <Route
                   path="checklist"
                   element={
@@ -91,18 +91,6 @@ export const App = () => {
                       title="Prioritized Verification Checklist"
                       description="Actionable, evidence-backed tasks for human researchers to follow up on unresolved gaps and contradictions."
                       icon={CheckSquare}
-                    />
-                  }
-                />
-
-                {/* 6. Research History (Coming Soon) */}
-                <Route
-                  path="history"
-                  element={
-                    <PlaceholderPage
-                      title="Research Session Archives"
-                      description="Browse, export, and search historical gap detection investigations stored in Supabase PostgreSQL."
-                      icon={History}
                     />
                   }
                 />

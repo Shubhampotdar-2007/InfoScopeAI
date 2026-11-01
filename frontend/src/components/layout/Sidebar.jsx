@@ -27,7 +27,13 @@ export const Sidebar = ({ isOpen, onClose }) => {
       to: '/research/new',
       label: 'New Research',
       icon: Sparkles,
-      status: 'Coming Soon',
+      status: null,
+    },
+    {
+      to: '/history',
+      label: 'Research History',
+      icon: History,
+      status: null,
     },
     {
       to: '/sources',
@@ -45,12 +51,6 @@ export const Sidebar = ({ isOpen, onClose }) => {
       to: '/checklist',
       label: 'Verification Checklist',
       icon: CheckSquare,
-      status: 'Coming Soon',
-    },
-    {
-      to: '/history',
-      label: 'Research History',
-      icon: History,
       status: 'Coming Soon',
     },
   ];
