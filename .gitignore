@@ -43,3 +43,8 @@ htmlcov/
 Thumbs.db
 *.swp
 *.swo
+
+# Codebase digests
+digest.txt
+gitingest.txt
+
