@@ -33,8 +33,18 @@ htmlcov/
 
 # Environment variables
 .env
+.env.*
 .env*.local
+*.env
+*.env.*
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
 !.env.example
+!backend/.env.example
+!frontend/.env.example
+!**/.env.example
 
 # Editor / OS
 .vscode/
